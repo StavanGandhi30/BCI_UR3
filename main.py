@@ -1,4 +1,5 @@
-from cortex import Cortex
+from ur3 import *
+from cortex import *
 import tkinter as tk
 import time
 import pyautogui
@@ -96,6 +97,16 @@ class Painter():
 
         self.createCanvas()
         self.cursorInit()
+        self.initKeys()
+
+    def initKeys(self):
+        self.canvas.focus_set()
+
+        self.canvas.bind("<B1-Motion>", self.paint)
+        self.canvas.bind("<ButtonRelease-1>", self.reset)
+        self.canvas.bind("<Left>", self.moveLeft)
+        self.canvas.bind("<Right>", self.moveRight)
+
 
     def cursorInit(self):
         if (self.old_x == None or self.old_y == None):
@@ -106,14 +117,6 @@ class Painter():
     def createCanvas(self):
         self.canvas = tk.Canvas(self.root, width=500, height=500, bg="white")
         self.canvas.pack(fill=tk.BOTH, expand=True)
-
-        self.canvas.bind("<B1-Motion>", self.paint)
-        self.canvas.bind("<ButtonRelease-1>", self.reset)
-
-        self.canvas.focus_set()
-
-        self.canvas.bind("<Left>", self.moveLeft)
-        self.canvas.bind("<Right>", self.moveRight)
 
     def moveLeft(self):
         self.cursorInit()
@@ -127,6 +130,8 @@ class Painter():
             )
 
             self.old_x = new_x
+
+            
 
     def moveRight(self):
         self.cursorInit()
@@ -183,14 +188,10 @@ class Painter():
 actions = ['lift','drop','left','right']
 sensitivity = 10
 
-# def start_autodraw():
-    # time.sleep(2)
-
-    # screenWidth, screenHeight = pyautogui.size()
-    # pyautogui.moveTo(screenWidth/2, screenHeight/2)
-    # pyautogui.click()
-
 if __name__ == "__main__":
+    robot = UR3e()
+    robot.returnToHome()
+
     root = tk.Tk()
     app = Painter(root, sensitivity)
     eeg = Subscribe(os.getenv("client_id"), os.getenv("client_secret"), os.getenv("profile_name"), actions, app, sensitivity, debug_mode=False)
@@ -199,9 +200,6 @@ if __name__ == "__main__":
     eeg_thread = threading.Thread(target=lambda: eeg.start(['com']), daemon=True)
     eeg_thread.start()
 
-    # Start pyautogui drawing in background
-    # draw_thread = threading.Thread(target=start_autodraw, daemon=True)
-    # draw_thread.start()
-
     # Run Tkinter in main thread
+    robot.closeConnection()
     root.mainloop()
