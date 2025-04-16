@@ -1,4 +1,3 @@
-from ur3 import *
 from cortex import *
 import tkinter as tk
 import time
@@ -38,10 +37,6 @@ class Subscribe():
 
     def on_new_data_labels(self, *args, **kwargs):
         pass
-        # data = kwargs.get('data')
-        # stream_name = data['streamName']
-        # stream_labels = data['labels']
-        # print('{} labels are : {}'.format(stream_name, stream_labels))
 
     def on_new_com_data(self, *args, **kwargs):
         if self.loaded_profile == False:
@@ -55,7 +50,6 @@ class Subscribe():
 
         action = data.get('action')
         power = data.get('power')
-        # time = data.get('time')
 
         if (action == "left"):
             self.painter.moveLeft()
@@ -72,7 +66,6 @@ class Subscribe():
         if (action == "drop"):
             self.painter.moveDown()
             time.sleep(0.1)
-
 
         print([action, power])
     
@@ -186,9 +179,6 @@ actions = ['lift','drop','left','right']
 sensitivity = 10
 
 if __name__ == "__main__":
-    robot = UR3e()
-    robot.returnToHome()
-
     root = tk.Tk()
     app = Painter(root, sensitivity)
     eeg = Subscribe(os.getenv("client_id"), os.getenv("client_secret"), os.getenv("profile_name"), actions, app, sensitivity, debug_mode=False)
@@ -198,5 +188,4 @@ if __name__ == "__main__":
     eeg_thread.start()
 
     # Run Tkinter in main thread
-    robot.closeConnection()
     root.mainloop()
