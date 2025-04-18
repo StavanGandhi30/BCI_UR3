@@ -76,8 +76,8 @@ class Cortex(Dispatcher):
         self.license = ''
         self.isHeadsetConnected = False
 
-        self.id = ''.join(client_id)
-        self.secret = ''.join(client_secret)
+        self.id = client_id
+        self.secret = client_secret
 
 
         if self.id == '':

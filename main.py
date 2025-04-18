@@ -2,15 +2,61 @@ from ur3 import *
 from cortex import *
 import tkinter as tk
 import time
-import pyautogui
 import threading
 from dotenv import load_dotenv
 import os
+import sys
+import logging
+import rtde.rtde as rtde
+import rtde.rtde_config as rtde_config
+
+sys.path.append("..")
+
+ROBOT_HOST = "140.192.35.5"
+ROBOT_PORT = 30004
+config_filename = "./rtde/control_loop_configuration.xml"
+
+logging.getLogger().setLevel(logging.INFO)
+
+conf = rtde_config.ConfigFile(config_filename)
+state_names, state_types = conf.get_recipe("state")
+setp_names, setp_types = conf.get_recipe("setp")
+watchdog_names, watchdog_types = conf.get_recipe("watchdog")
+
+con = rtde.RTDE(ROBOT_HOST, ROBOT_PORT)
+con.connect()
+
+# get controller version
+con.get_controller_version()
+
+# setup recipes
+con.send_output_setup(state_names, state_types)
+setp = con.send_input_setup(setp_names, setp_types)
+watchdog = con.send_input_setup(watchdog_names, watchdog_types)
+
+xmin, xmax, ymin, ymax, z = 0.15, 0.50, -0.22, 0.22, -0.40
+
+data = [z, (ymax+ymin)/2, (xmax+xmin)/2, 2.4, 1.8, -2.615]
+
+setp.input_double_register_0 = 0
+setp.input_double_register_1 = 0
+setp.input_double_register_2 = 0
+setp.input_double_register_3 = 0
+setp.input_double_register_4 = 0
+setp.input_double_register_5 = 0
+
+watchdog.input_int_register_0 = 0
+
+sensitivity = 0.005
+
+# start data synchronization
+if not con.send_start():
+    sys.exit()
 
 load_dotenv()
 
 class Subscribe():
-    def __init__(self, app_client_id, app_client_secret, app_profile_name, actions, painter, sensitivity, debug_mode=False, **kwargs):
+    def __init__(self, app_client_id, app_client_secret, app_profile_name, actions, sensitivity, debug_mode=False, **kwargs):
         self.c = Cortex(client_id=app_client_id, client_secret=app_client_secret, debug_mode=debug_mode, **kwargs)
         self.c.bind(create_session_done=self.on_create_session_done)
         self.c.bind(new_data_labels=self.on_new_data_labels)
@@ -19,7 +65,6 @@ class Subscribe():
         self.app_profile_name = app_profile_name
         self.loaded_profile = False
         self.actions = actions
-        self.painter = painter
         self.sensitivity = sensitivity
 
     def start(self, streams, headsetId=''):
@@ -38,10 +83,6 @@ class Subscribe():
 
     def on_new_data_labels(self, *args, **kwargs):
         pass
-        # data = kwargs.get('data')
-        # stream_name = data['streamName']
-        # stream_labels = data['labels']
-        # print('{} labels are : {}'.format(stream_name, stream_labels))
 
     def on_new_com_data(self, *args, **kwargs):
         if self.loaded_profile == False:
@@ -51,30 +92,33 @@ class Subscribe():
             return
         
         self.c.set_mental_command_active_action(self.actions)
-        data = kwargs.get('data')
+        eeg_data = kwargs.get('data')
 
-        action = data.get('action')
-        power = data.get('power')
-        # time = data.get('time')
+        action = eeg_data.get('action')
+        power = eeg_data.get('power')
 
         if (action == "left"):
-            self.painter.moveLeft()
-            time.sleep(0.1)
-    
+            if ((data[1]-sensitivity) > ymin):
+                data[1]-=sensitivity
+            print("left")
+
         if (action == "right"):
-            self.painter.moveRight()
-            time.sleep(0.1)
+            if ((data[1]+sensitivity) < ymax):
+                data[1]+=sensitivity
+            print("right")
 
         if (action == "lift"):
-            self.painter.moveUp()
-            time.sleep(0.1)
+            if ((data[2]+sensitivity) < xmax):
+                data[2]+=sensitivity
+            print("lift")
     
         if (action == "drop"):
-            self.painter.moveDown()
-            time.sleep(0.1)
-
+            if ((data[2]-sensitivity) > xmin):
+                data[2]-=sensitivity
+            print("drop")
 
         print([action, power])
+
     
     def on_create_session_done(self, *args, **kwargs):
         self.sub(self.streams)
@@ -84,119 +128,38 @@ class Subscribe():
             error_data = kwargs.get('error_data')
             print(error_data)
 
-class Painter():
-    def __init__(self, root, sensitivity):
-        self.root = root
-        self.root.attributes('-fullscreen', True)
-        self.root.title("Paint App")
-        self.sensitivity = sensitivity
-        self.screenWidth, self.screenHeight = pyautogui.size()
+def ur3e_run_loop():
+    move_completed = True
+    while True:
+        # receive the current state
+        state = con.receive()
 
-        self.old_x = None
-        self.old_y = None
+        if state is None:
+            break
 
-        self.createCanvas()
-        self.cursorInit()
-        self.initKeys()
+        # do something...
+        if move_completed and state.output_int_register_0 == 1:
+            move_completed = False
+            for i in range(0, 6):
+                setp.__dict__["input_double_register_%i" % i] = data[i]
+            # print("New pose = " + str(data))
+            con.send(setp)
+            watchdog.input_int_register_0 = 1
+        elif not move_completed and state.output_int_register_0 == 0:
+            move_completed = True
+            watchdog.input_int_register_0 = 0
 
-    def initKeys(self):
-        self.canvas.focus_set()
+        # kick watchdog
+        con.send(watchdog)
 
-        self.canvas.bind("<B1-Motion>", self.paint)
-        self.canvas.bind("<ButtonRelease-1>", self.reset)
-        self.canvas.bind("<Left>", self.moveLeft)
-        self.canvas.bind("<Right>", self.moveRight)
-
-    def cursorInit(self):
-        if (self.old_x == None or self.old_y == None):
-
-            self.old_x = self.screenWidth/2
-            self.old_y = self.screenHeight/2
-
-    def createCanvas(self):
-        self.canvas = tk.Canvas(self.root, width=500, height=500, bg="white")
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-
-    def moveLeft(self):
-        self.cursorInit()
-
-        new_x = self.old_x - self.sensitivity
-
-        if (new_x >= 0):
-            self.canvas.create_line(
-                self.old_x, self.old_y, new_x, self.old_y,
-                width=2, fill="green", capstyle=tk.ROUND, smooth=tk.TRUE
-            )
-
-            self.old_x = new_x
-
-    def moveRight(self):
-        self.cursorInit()
-
-        new_x = self.old_x + self.sensitivity
-
-        if (new_x <= self.screenWidth):
-            self.canvas.create_line(
-                self.old_x, self.old_y, new_x, self.old_y,
-                width=2, fill="red", capstyle=tk.ROUND, smooth=tk.TRUE
-            )
-
-            self.old_x = new_x
-
-    def moveUp(self):
-        self.cursorInit()
-
-        new_y = self.old_y + self.sensitivity
-
-        if (new_y <= self.screenHeight):
-            self.canvas.create_line(
-                self.old_x, self.old_y, self.old_x, new_y,
-                width=2, fill="green", capstyle=tk.ROUND, smooth=tk.TRUE
-            )
-
-            self.old_y = new_y
-
-    def moveDown(self):
-        self.cursorInit()
-
-        new_y = self.old_y - self.sensitivity
-
-        if (new_y >= 0):
-            self.canvas.create_line(
-                self.old_x, self.old_y, self.old_x, new_y,
-                width=2, fill="green", capstyle=tk.ROUND, smooth=tk.TRUE
-            )
-
-            self.old_y = new_y
-            
-    def paint(self, event):
-        if self.old_x and self.old_y:
-            self.canvas.create_line(
-                self.old_x, self.old_y, event.x, event.y,
-                width=2, fill="black", capstyle=tk.ROUND, smooth=tk.TRUE
-            )
-        
-        self.old_x, self.old_y = event.x, event.y
-
-    def reset(self, event):
-        self.old_x = None
-        self.old_y = None
+    con.send_pause()
+    con.disconnect()
 
 actions = ['lift','drop','left','right']
-sensitivity = 10
 
 if __name__ == "__main__":
-    robot = UR3e()
-    robot.returnToHome()
-
-    root = tk.Tk()
-    app = Painter(root, sensitivity)
-    eeg = Subscribe(os.getenv("client_id"), os.getenv("client_secret"), os.getenv("profile_name"), actions, app, sensitivity, debug_mode=False)
-
-    # Start EEG stream in background
+    eeg = Subscribe(os.getenv("client_id"), os.getenv("client_secret"), os.getenv("profile_name"), actions, sensitivity, debug_mode=False)
     eeg_thread = threading.Thread(target=lambda: eeg.start(['com']), daemon=True)
     eeg_thread.start()
-
-    # Run Tkinter in main thread
-    robot.closeConnection()
-    root.mainloop()
+    
+    ur3e_run_loop()
