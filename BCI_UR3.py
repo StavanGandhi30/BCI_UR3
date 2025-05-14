@@ -12,7 +12,7 @@ import rtde.rtde_config as rtde_config
 
 sys.path.append("..")
 
-ROBOT_HOST = "140.192.35.5"
+ROBOT_HOST = "192.168.1.102"
 ROBOT_PORT = 30004
 config_filename = "./rtde/control_loop_configuration.xml"
 
@@ -118,8 +118,7 @@ class Subscribe():
             print("drop")
 
         print([action, power])
-
-    
+ 
     def on_create_session_done(self, *args, **kwargs):
         self.sub(self.streams)
 

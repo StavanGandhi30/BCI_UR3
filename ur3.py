@@ -1,3 +1,5 @@
+# sudo cp ca.pem /usr/local/share/ca-certificates/emotiv.crt
+
 import socket
 import math
 import struct
