@@ -126,83 +126,79 @@ def moveDown():
         data[2]-=sensitivity
         print("Going Down")
 
-def left_key(e):
-    global start_time, last_command
-    if ((time.time() - start_time) < 3): 
-        if last_command[0]:
-            if last_command[0] == "up":
-                moveTopLeft(last_command)
-            if last_command[0] == "down":
-                moveBottomLeft(last_command)
-            last_command = [None, None]
-            start_time = time.time()
-        else:
-            last_command[0] = "left"
-            last_command[1] = random.uniform(0.4, 0.9)
-            moveLeft()
-    else:
-        moveLeft()
-        start_time = time.time()
+def handle_key(direction):
+    global first_command_time, last_commands
 
-def right_key(e):
-    global start_time, last_command
-    if ((time.time() - start_time) < 3): 
-        if last_command[0]:
-            if last_command[0] == "up":
-                moveTopRight(last_command)
-            if last_command[0] == "down":
-                moveBottomRight(last_command)
-            last_command = [None, None]
-            start_time = time.time()
-        else:
-            last_command[0] = "right"
-            last_command[1] = random.uniform(0, 1)
-            moveRight()
-    else:
-        moveRight()
-        start_time = time.time()
+    now = time.time()
+    rand_val = random.uniform(0.4, 1)
 
-def up_key(e):
-    global start_time, last_command
-    if ((time.time() - start_time) < 3): 
-        if last_command[0]:
-            if last_command[0] == "left":
-                moveTopLeft(last_command)
-            if last_command[0] == "right":
-                moveTopRight(last_command)
-            last_command = [None, None]
-            start_time = time.time()
-        else:
-            last_command[0] = "up"
-            last_command[1] = random.uniform(0, 1)
-            moveUp()
+    if not first_command_time:
+        # Start a new combo window
+        last_commands = {direction: rand_val}
+        first_command_time = now
+        return
 
-    else:
-        moveUp()
-        start_time = time.time()
+    # If direction already pressed, update only if new value is higher
+    if direction in last_commands:
+        if rand_val > last_commands[direction]:
+            last_commands[direction] = rand_val
+    else: 
+        # Add new direction
+        last_commands[direction] = rand_val
 
-def down_key(e):
-    global start_time, last_command
-    if ((time.time() - start_time) < 3): 
-        if last_command[0]:
-            if last_command[0] == "left":
-                moveBottomLeft(last_command)
-            if last_command[0] == "right":
-                moveBottomRight(last_command)
-            last_command = [None, None]
-            start_time = time.time()
+    # Combo of two distinct directions is ready
+    if len(last_commands) == 2:
+        print("Making diagonals movement")
+
+        dirs = sorted(last_commands.keys())
+        key = tuple(dirs)
+
+        movement_map = {
+            ("down", "left"): moveBottomLeft,
+            ("left", "down"): moveBottomLeft,
+            ("down", "right"): moveBottomRight,
+            ("right", "down"): moveBottomRight,
+            ("up", "left"): moveTopLeft,
+            ("left", "up"): moveTopLeft,
+            ("up", "right"): moveTopRight,
+            ("right", "up"): moveTopRight,
+        }
+
+        if key in movement_map:
+            # Pass the direction with the highest weight
+            max_dir = max(last_commands.items(), key=lambda x: x[1])
+            movement_map[key](max_dir)
         else:
-            last_command[0] = "down"
-            last_command[1] = random.uniform(0, 1)
-            moveDown()
-    else:
-        moveDown()
-        start_time = time.time()
+            print(f"No movement defined for combo: {key}")
+
+        # Reset combo state
+        last_commands = {}
+        first_command_time = None
+    
+    elif len(last_commands) == 1 and (now - first_command_time > 2):
+        print("Making single movement")
+
+        direction = list(last_commands.keys())[0]
+        single_move_map = {
+            "left": moveLeft,
+            "right": moveRight,
+            "up": moveUp,
+            "down": moveDown,
+        }
+
+        if direction in single_move_map:
+            single_move_map[direction]()
+        else:
+            print(f"No single movement defined for: {direction}")
+
+        # Reset after executing single direction
+        last_commands = {}
+        first_command_time = None
 
 
 if __name__ == "__main__":
-    start_time = time.time()
-    last_command = [None, None]
+    last_commands = {}
+    first_command_time = None
 
     ur3e_thread = threading.Thread(target=lambda: ur3e_run_loop(), daemon=True)
     ur3e_thread.start()
@@ -210,10 +206,10 @@ if __name__ == "__main__":
     main = tk.Tk()
     frame = tk.Frame(main, width=100, height=100)
 
-    main.bind('<Left>', left_key)
-    main.bind('<Right>', right_key)
-    main.bind('<Up>', up_key)
-    main.bind('<Down>', down_key)
+    main.bind('<Left>', lambda e: handle_key("left"))
+    main.bind('<Right>', lambda e: handle_key("right"))
+    main.bind('<Up>', lambda e: handle_key("up"))
+    main.bind('<Down>', lambda e: handle_key("down"))
 
     frame.pack()
     main.mainloop()

@@ -13,9 +13,7 @@ import random
 
 sys.path.append("..")
 
-
-ROBOT_HOST = "140.192.35.114"
-ROBOT_PORT = 30004
+ROBOT_HOST, ROBOT_PORT = "140.192.35.114", 30004
 config_filename = "./rtde/control_loop_configuration.xml"
 
 logging.getLogger().setLevel(logging.INFO)
@@ -104,78 +102,73 @@ def moveDown():
         data[2]-=sensitivity
         print("Going Down")
 
-def left_key(intensity):
-    global start_time, last_command
-    if ((time.time() - start_time) < 3): 
-        if last_command[0]:
-            if last_command[0] == "up":
-                moveTopLeft(last_command)
-            if last_command[0] == "down":
-                moveBottomLeft(last_command)
-            last_command = [None, None]
-            start_time = time.time()
-        else:
-            last_command[0] = "left"
-            last_command[1] = intensity
-            moveLeft()
-    else:
-        moveLeft()
-        start_time = time.time()
+def handle_key(direction, intensity):
+    global first_command_time, last_commands
 
-def right_key(intensity):
-    global start_time, last_command
-    if ((time.time() - start_time) < 3): 
-        if last_command[0]:
-            if last_command[0] == "up":
-                moveTopRight(last_command)
-            if last_command[0] == "down":
-                moveBottomRight(last_command)
-            last_command = [None, None]
-            start_time = time.time()
-        else:
-            last_command[0] = "right"
-            last_command[1] = intensity
-            moveRight()
-    else:
-        moveRight()
-        start_time = time.time()
+    now = time.time()
 
-def up_key(intensity):
-    global start_time, last_command
-    if ((time.time() - start_time) < 3): 
-        if last_command[0]:
-            if last_command[0] == "left":
-                moveTopLeft(last_command)
-            if last_command[0] == "right":
-                moveTopRight(last_command)
-            last_command = [None, None]
-            start_time = time.time()
-        else:
-            last_command[0] = "up"
-            last_command[1] = intensity
-            moveUp()
+    if not first_command_time:
+        # Start a new combo window
+        last_commands = {direction: intensity}
+        first_command_time = now
+        return
 
-    else:
-        moveUp()
-        start_time = time.time()
+    # If direction already pressed, update only if new value is higher
+    if direction in last_commands:
+        if intensity > last_commands[direction]:
+            last_commands[direction] = intensity
+    else: 
+        # Add new direction
+        last_commands[direction] = intensity
 
-def down_key(intensity):
-    global start_time, last_command
-    if ((time.time() - start_time) < 3): 
-        if last_command[0]:
-            if last_command[0] == "left":
-                moveBottomLeft(last_command)
-            if last_command[0] == "right":
-                moveBottomRight(last_command)
-            last_command = [None, None]
-            start_time = time.time()
+    # Combo of two distinct directions is ready
+    if len(last_commands) == 2:
+        print("Making diagonals movement")
+
+        dirs = sorted(last_commands.keys())
+        key = tuple(dirs)
+
+        movement_map = {
+            ("down", "left"): moveBottomLeft,
+            ("left", "down"): moveBottomLeft,
+            ("down", "right"): moveBottomRight,
+            ("right", "down"): moveBottomRight,
+            ("up", "left"): moveTopLeft,
+            ("left", "up"): moveTopLeft,
+            ("up", "right"): moveTopRight,
+            ("right", "up"): moveTopRight,
+        }
+
+        if key in movement_map:
+            # Pass the direction with the highest weight
+            max_dir = max(last_commands.items(), key=lambda x: x[1])
+            movement_map[key](max_dir)
         else:
-            last_command[0] = "down"
-            last_command[1] = intensity
-            moveDown()
-    else:
-        moveDown()
-        start_time = time.time()
+            print(f"No movement defined for combo: {key}")
+
+        # Reset combo state
+        last_commands = {}
+        first_command_time = None
+    
+    elif len(last_commands) == 1 and (now - first_command_time > 2):
+        print("Making single movement")
+
+        direction = list(last_commands.keys())[0]
+        single_move_map = {
+            "left": moveLeft,
+            "right": moveRight,
+            "up": moveUp,
+            "down": moveDown,
+        }
+
+        if direction in single_move_map:
+            single_move_map[direction]()
+        else:
+            print(f"No single movement defined for: {direction}")
+
+        # Reset after executing single direction
+        last_commands = {}
+        first_command_time = None
 
 def ur3e_run_loop():
     move_completed = True
@@ -247,16 +240,16 @@ class Subscribe():
         power = float(eeg_data.get('power'))
 
         if (action == "left"):
-            left_key(power)
+            handle_key("left", power)
 
         if (action == "right"):
-            right_key(power)
+            handle_key("right", power)
 
         if (action == "lift"):
-            up_kermiy(power)
+            handle_key("up", power)
     
         if (action == "drop"):
-            down_key(power)
+            handle_key("down", power)
 
         print([action, power])
  
@@ -275,6 +268,8 @@ last_command = [None, None]
 load_dotenv()
 
 if __name__ == "__main__":
+    last_commands = {}
+    first_command_time = None
 
     eeg = Subscribe(os.getenv("client_id"), os.getenv("client_secret"), os.getenv("profile_name"), actions, sensitivity, debug_mode=False)
     eeg_thread = threading.Thread(target=lambda: eeg.start(['com']), daemon=True)
