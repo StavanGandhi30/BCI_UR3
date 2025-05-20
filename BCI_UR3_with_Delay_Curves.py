@@ -11,7 +11,6 @@ import rtde.rtde as rtde
 import rtde.rtde_config as rtde_config
 import random
 
-sys.path.append("..")
 
 ROBOT_HOST, ROBOT_PORT = "140.192.35.114", 30004
 config_filename = "./rtde/control_loop_configuration.xml"
