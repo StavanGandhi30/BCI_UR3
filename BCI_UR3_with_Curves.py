@@ -13,8 +13,7 @@ import random
 
 sys.path.append("..")
 
-
-ROBOT_HOST = "140.192.35.114"
+ROBOT_HOST = "140.192.35.37"
 ROBOT_PORT = 30004
 config_filename = "./rtde/control_loop_configuration.xml"
 
@@ -253,7 +252,7 @@ class Subscribe():
             right_key(power)
 
         if (action == "lift"):
-            up_kermiy(power)
+            up_key(power)
     
         if (action == "drop"):
             down_key(power)

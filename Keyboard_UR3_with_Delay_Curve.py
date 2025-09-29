@@ -9,7 +9,7 @@ import random
 
 sys.path.append("..")
 
-ROBOT_HOST = "140.192.35.114"
+ROBOT_HOST = "192.168.4.125"
 ROBOT_PORT = 30004
 config_filename = "./rtde/control_loop_configuration.xml"
 

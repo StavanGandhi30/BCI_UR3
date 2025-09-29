@@ -12,7 +12,7 @@ import rtde.rtde_config as rtde_config
 import random
 
 
-ROBOT_HOST, ROBOT_PORT = "140.192.35.114", 30004
+ROBOT_HOST, ROBOT_PORT = "140.192.35.37", 30004
 config_filename = "./rtde/control_loop_configuration.xml"
 
 logging.getLogger().setLevel(logging.INFO)
